@@ -51,7 +51,6 @@ def build_encode_command(
         ]
     return command
 
-
 def encode_media(
     item: ManifestItem,
     input_path,
@@ -84,51 +83,18 @@ def encode_media(
 
     return result
 
-# ----> First Test
-if __name__ == "__main__":
-
-    from manifest import load_manifest
-
-    manifest_path = "manifest.csv"
-
-    items = load_manifest(
-        manifest_path
-    )
-
-    item = next(
-        item
-        for item in items
-        if (
-            item.disc == "Sci Fi 1a"
-            and item.title == 0
-        )
-    )
-
-    input_path = (
-        "/home/ericdencer/Video Archive/"
-        "staging/Sci Fi 1a/A1_t00.mkv"
-    )
-
-    output_path = (
-        "/home/ericdencer/Video Archive/"
-        "encoded/Sci Fi 1a/"
-        "Horrors of Spider Island.mkv"
-    )
-
-    result = encode_media(
-        item,
-        input_path,
-        output_path,
-    )
-
-    print(
-        f"ffmpeg return code: "
-        f"{result.returncode}"
-    )
-
-def encoding_succeeded(output_path) -> bool:
+def encoding_succeeded(
+    output_path,
+) -> bool:
     """
     Verify that ffmpeg created a non-empty output file.
+
+    Args:
+        output_path:
+            Expected path of the encoded media file.
+
+    Returns:
+        True when the output file exists and contains data.
     """
 
     output_path = Path(output_path)
