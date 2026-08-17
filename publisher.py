@@ -114,53 +114,64 @@ def publishing_succeeded(
         == destination_path.stat().st_size
     )
 
-# -------- 
-# Test Run 
-# ----- 
-if __name__ == "__main__":
+def build_tv_destination(
+    item: ManifestItem,
+    library_root,
+):
+    library_root = Path(library_root)
 
-    from manifest import load_manifest
-
-    manifest_path = "manifest.csv"
-
-    items = load_manifest(
-        manifest_path
-    )
-
-    item = next(
-        item
-        for item in items
-        if (
-            item.disc == "Sci Fi 1a"
-            and item.title == 0
+    if not item.show_name:
+        raise ValueError(
+            "Cannot publish TV episode "
+            "without a show name."
         )
+
+    if not item.year:
+        raise ValueError(
+            f"Cannot publish {item.show_name} "
+            "without a year."
+        )
+
+    if not item.season:
+        raise ValueError(
+            f"Cannot publish {item.show_name} "
+            "without a season."
+        )
+
+    if not item.episode:
+        raise ValueError(
+            f"Cannot publish {item.show_name} "
+            "without an episode."
+        )
+
+    if not item.episode_title:
+        raise ValueError(
+            f"Cannot publish {item.show_name} "
+            "without an episode title."
+        )
+
+    season_number = int(item.season)
+    episode_number = int(item.episode)
+
+    show_folder = (
+        f"{item.show_name} ({item.year})"
     )
 
-    source_path = (
-        "/home/ericdencer/Video Archive/"
-        "encoded/Sci Fi 1a/"
-        "Horrors of Spider Island.mkv"
+    season_folder = (
+        f"Season {season_number:02d}"
     )
 
-    library_root = (
-        "/home/ericdencer/Video Archive/plex"
+    filename = (
+        f"{show_folder} - "
+        f"S{season_number:02d}"
+        f"E{episode_number:02d} - "
+        f"{item.episode_title}.mkv"
     )
 
-    destination_path = publish_movie(
-        item,
-        source_path,
-        library_root,
-    )
-
-    success = publishing_succeeded(
-        source_path,
-        destination_path,
-    )
-
-    print(
-        f"Publishing success: {success}"
-    )
-
-    print(
-        f"Destination: {destination_path}"
+    return (
+        library_root
+        / "TV Shows"
+        / show_folder
+        / season_folder
+        / filename
     )

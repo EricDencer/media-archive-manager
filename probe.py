@@ -120,5 +120,3 @@ def summarize_media(probe_data):
         )
 
     return summary
-
-# Temp code Block 
