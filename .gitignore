@@ -1,0 +1,37 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment/config secrets
+.env
+.env.*
+
+# Local application state
+manifest.csv
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Test scratch files
+test1.txt
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# OS metadata
+.DS_Store
+Thumbs.db
