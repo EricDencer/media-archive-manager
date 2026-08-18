@@ -1,0 +1,71 @@
+
+And for `examples/sci-fi-1a.ingest.yaml`:
+
+```yaml
+schema_version: 1
+
+disc:
+  name: Sci Fi 1a
+  format: dvd
+
+titles:
+  - title: 0
+    approved: true
+    media:
+      type: movie
+      name: Horrors of Spider Island
+      year: 1960
+
+  - title: 1
+    approved: true
+    media:
+      type: movie
+      name: The Wasp Woman
+      year: 1959
+
+  - title: 2
+    approved: true
+    media:
+      type: movie
+      name: The Atomic Brain
+      year: 1963
+
+  - title: 3
+    approved: false
+    media:
+      type: tv
+      show: One Step Beyond
+      year: 1959
+      season: 1
+      episode: 3
+      episode_title: The Dream
+
+  - title: 4
+    approved: false
+    media:
+      type: tv
+      show: One Step Beyond
+      year: 1959
+      season: 1
+      episode: 6
+      episode_title: Epilogue
+
+  - title: 5
+    approved: false
+    media:
+      type: tv
+      show: One Step Beyond
+      year: 1959
+      season: 2
+      episode:
+      episode_title: Night of April 14th
+
+  - title: 6
+    approved: false
+    media:
+      type: tv
+      show: One Step Beyond
+      year: 1959
+      season: 1
+      episode: 9
+      episode_title: The Dead Part of the House
