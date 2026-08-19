@@ -33,8 +33,11 @@ from database import (
 )
 from repository import (
     get_or_create_disc,
+    get_titles_ready_for_extraction,
     sync_scanned_title,
 )
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -155,14 +158,16 @@ def inspect_backup(
 # Extraction stage
 # ---------------------------------------------------------------------------
 
-
 def run_extraction_stage(
     backup: DVDBackup,
     items: list[ManifestItem],
     config: AppConfig,
+    connection,
 ) -> None:
     """
     Extract titles that have been identified and approved.
+
+    SQLite determines which source titles are eligible for extraction.
 
     Eligible workflow states:
         identified
@@ -172,16 +177,28 @@ def run_extraction_stage(
         identified -> extracted
     """
 
+    disc_id = get_or_create_disc(
+        connection,
+        name=backup.name,
+        backup_path=backup.path,
+    )
+
+    db_ready_titles = get_titles_ready_for_extraction(
+        connection,
+        disc_id,
+    )
+
+    ready_source_titles = {
+        row["source_title"]
+        for row in db_ready_titles
+    }
+
     ready_items = [
         item
         for item in items
         if (
             item.disc == backup.name
-            and item.ready == "yes"
-            and item.status in (
-                "identified",
-                "extract_failed",
-            )
+            and item.title in ready_source_titles
         )
     ]
 
@@ -612,6 +629,7 @@ def main() -> None:
             backup,
             items,
             config,
+            connection,
         )
 
         run_probe_stage(

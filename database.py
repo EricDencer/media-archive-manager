@@ -50,6 +50,8 @@ def connect_database(
         database_path
     )
 
+    connection.row_factory = sqlite3.Row
+
     connection.execute(
         "PRAGMA foreign_keys = ON"
     )

@@ -774,3 +774,33 @@ def sync_scanned_title(
         size_bytes=size_bytes,
         output_filename=output_filename,
     )
+def get_titles_ready_for_extraction(
+    connection: sqlite3.Connection,
+    disc_id: int,
+):
+    """
+    Return source titles eligible for extraction.
+
+    A title is eligible when:
+        - it belongs to the requested disc;
+        - it has been human-approved;
+        - its workflow state is either identified or extract_failed.
+
+    Returns:
+        sqlite3.Row objects ordered by source title number.
+    """
+
+    return connection.execute(
+        """
+        SELECT *
+        FROM titles
+        WHERE disc_id = ?
+          AND approved = 1
+          AND status IN (
+              'identified',
+              'extract_failed'
+          )
+        ORDER BY source_title
+        """,
+        (disc_id,),
+    ).fetchall()
