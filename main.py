@@ -18,6 +18,7 @@ be replaced in a later change without changing the workflow stages.
 from pathlib import Path
 
 from config import AppConfig, load_config
+import config
 from encoder import encode_media, encoding_succeeded
 from extractor import extract_title, extraction_succeeded
 from makemkv import inspect_dvd, parse_robot_titles
@@ -26,6 +27,14 @@ from models import DVDBackup, ManifestItem
 from probe import probe_media, summarize_media
 from scanner import find_dvd_backups
 from validator import validate_encoded_media
+from database import (
+    connect_database,
+    initialize_database,
+)
+from repository import (
+    get_or_create_disc,
+    sync_scanned_title,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +83,7 @@ def select_backup(
 def inspect_backup(
     backup: DVDBackup,
     config: AppConfig,
+    connection,
 ) -> list[ManifestItem]:
     """
     Inspect a DVD backup and synchronize its MakeMKV title data
@@ -100,6 +110,12 @@ def inspect_backup(
         result.stdout + result.stderr
     )
 
+    disc_id = get_or_create_disc(
+        connection,
+        name=backup.name,
+        backup_path=backup.path,
+    )
+
     items = load_manifest(
         config.manifest_path
     )
@@ -115,11 +131,23 @@ def inspect_backup(
         items,
     )
 
+    for title in titles:
+        sync_scanned_title(
+            connection,
+            disc_id=disc_id,
+            source_title=title.index,
+            duration=title.duration or "",
+            duration_seconds=title.duration_seconds or 0,
+            chapters=title.chapters or 0,
+            size_bytes=title.size_bytes or 0,
+            output_filename=title.output_filename or "",
+        )
+
     print(
         f"Manifest updated with "
         f"{len(titles)} titles."
     )
-
+    
     return items
 
 
@@ -559,40 +587,53 @@ def main() -> None:
 
     config = load_config()
 
-    backup = select_backup(
-        config,
-        "Sci Fi 1a",
+    initialize_database(
+        config.database_path,
+        config.schema_path,
     )
 
-    items = inspect_backup(
-        backup,
-        config,
+    connection = connect_database(
+        config.database_path
     )
 
-    run_extraction_stage(
-        backup,
-        items,
-        config,
-    )
+    try:
+        backup = select_backup(
+            config,
+            "Sci Fi 1a",
+        )
 
-    run_probe_stage(
-        backup,
-        items,
-        config,
-    )
+        items = inspect_backup(
+            backup,
+            config,
+            connection,
+        )
 
-    run_encode_stage(
-        backup,
-        items,
-        config,
-    )
+        run_extraction_stage(
+            backup,
+            items,
+            config,
+        )
 
-    run_validation_stage(
-        backup,
-        items,
-        config,
-    )
+        run_probe_stage(
+            backup,
+            items,
+            config,
+        )
 
+        run_encode_stage(
+            backup,
+            items,
+            config,
+        )
+
+        run_validation_stage(
+            backup,
+            items,
+            config,
+        )
+
+    finally:
+        connection.close()
 
 if __name__ == "__main__":
     main()

@@ -744,3 +744,33 @@ def get_artifacts_for_title(
         """,
         (title_id,),
     ).fetchall()
+
+def sync_scanned_title(
+    connection,
+    *,
+    disc_id: int,
+    source_title: int,
+    duration: str,
+    duration_seconds: int,
+    chapters: int,
+    size_bytes: int,
+    output_filename: str,
+) -> int:
+    """
+    Synchronize machine-discovered source metadata for one disc title.
+
+    Scan synchronization may update physical source characteristics,
+    but must not overwrite human identity, approval, workflow state,
+    or probe-owned technical metadata.
+    """
+
+    return upsert_title(
+        connection,
+        disc_id=disc_id,
+        source_title=source_title,
+        duration=duration,
+        duration_seconds=duration_seconds,
+        chapters=chapters,
+        size_bytes=size_bytes,
+        output_filename=output_filename,
+    )
