@@ -217,9 +217,10 @@ def migrate_disc(
         )
 
 if __name__ == "__main__":
-    database_path = Path(
-        "/tmp/media_archive_migration_test.db"
-    )
+  database_path = Path(
+      "/home/ericdencer/Video Archive/"
+      "media_archive.db"
+)
 yaml_path = Path(
     "/home/ericdencer/Video Archive/"
     "Sci Fi 1a/ingest.yaml"
