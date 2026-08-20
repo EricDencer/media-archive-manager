@@ -11,8 +11,11 @@ The individual processing operations are implemented in dedicated
 modules. This file is responsible only for determining which items
 are eligible for each stage and coordinating their execution.
 
-Persistence currently uses the CSV manifest. That implementation will
-be replaced in a later change without changing the workflow stages.
+SQLite is the authoritative operational persistence layer.
+
+Per-disc YAML provides human-reviewed media identity and approval.
+The processing stages use SQLite for workflow state and technical
+metadata.
 """
 
 from pathlib import Path
@@ -22,7 +25,6 @@ import config
 from encoder import encode_media, encoding_succeeded
 from extractor import extract_title, extraction_succeeded
 from makemkv import inspect_dvd, parse_robot_titles
-from manifest import load_manifest, merge_scan, save_manifest
 from models import DVDBackup, ManifestItem
 from probe import probe_media, summarize_media
 from scanner import find_dvd_backups
@@ -32,13 +34,14 @@ from database import (
     initialize_database,
 )
 from repository import (
+    get_manifest_items_for_disc,
     get_or_create_disc,
+    get_titles_by_status,
     get_titles_ready_for_extraction,
     sync_scanned_title,
+    update_title_probe_metadata,
+    update_title_status,
 )
-
-
-
 
 # ---------------------------------------------------------------------------
 # Backup discovery and inspection
@@ -92,8 +95,8 @@ def inspect_backup(
     Inspect a DVD backup and synchronize its MakeMKV title data
     with the current manifest.
 
-    Existing human-entered metadata and workflow state are preserved
-    by the manifest merge operation.
+    Returns:
+    Pipeline working objects built from the synchronized SQLite state.
 
     Returns:
         The updated collection of manifest items.
@@ -119,21 +122,6 @@ def inspect_backup(
         backup_path=backup.path,
     )
 
-    items = load_manifest(
-        config.manifest_path
-    )
-
-    items = merge_scan(
-        backup,
-        titles,
-        items,
-    )
-
-    save_manifest(
-        config.manifest_path,
-        items,
-    )
-
     for title in titles:
         sync_scanned_title(
             connection,
@@ -146,8 +134,13 @@ def inspect_backup(
             output_filename=title.output_filename or "",
         )
 
+        items = get_manifest_items_for_disc(
+            connection,
+            disc_id,
+        )
+
     print(
-        f"Manifest updated with "
+        f"Database synchronized with "
         f"{len(titles)} titles."
     )
     
@@ -244,9 +237,17 @@ def run_extraction_stage(
                 f"{item.name}"
             )
 
-        save_manifest(
-            config.manifest_path,
-            items,
+        db_title = next(
+            row
+            for row in db_ready_titles
+            if row["source_title"] == item.title
+        )
+
+        update_title_status(
+            connection,
+            title_id=db_title["id"],
+            status=item.status,
+            notes=item.notes or None,
         )
 
 
@@ -254,14 +255,16 @@ def run_extraction_stage(
 # Probe stage
 # ---------------------------------------------------------------------------
 
-
 def run_probe_stage(
     backup: DVDBackup,
     items: list[ManifestItem],
     config: AppConfig,
+    connection,
 ) -> None:
     """
     Probe extracted titles with ffprobe.
+
+    SQLite determines which source titles are eligible for probing.
 
     Eligible workflow states:
         extracted
@@ -271,15 +274,32 @@ def run_probe_stage(
         extracted -> probed
     """
 
+    disc_id = get_or_create_disc(
+        connection,
+        name=backup.name,
+        backup_path=backup.path,
+    )
+
+    db_probe_titles = get_titles_by_status(
+        connection,
+        disc_id,
+        (
+            "extracted",
+            "probe_failed",
+        ),
+    )
+
+    probe_source_titles = {
+        row["source_title"]
+        for row in db_probe_titles
+    }
+
     probe_items = [
         item
         for item in items
         if (
             item.disc == backup.name
-            and item.status in (
-                "extracted",
-                "probe_failed",
-            )
+            and item.title in probe_source_titles
         )
     ]
 
@@ -293,6 +313,12 @@ def run_probe_stage(
         print(
             f"Probing {backup.name} "
             f"title {item.title}: {item.name}"
+        )
+
+        db_title = next(
+            row
+            for row in db_probe_titles
+            if row["source_title"] == item.title
         )
 
         try:
@@ -340,6 +366,27 @@ def run_probe_stage(
             item.status = "probed"
             item.notes = ""
 
+            update_title_probe_metadata(
+                connection,
+                title_id=db_title["id"],
+                duration_seconds=item.duration_seconds,
+                video_codec=item.video_codec,
+                audio_codec=item.audio_codec,
+                width=item.width,
+                height=item.height,
+                display_aspect_ratio=item.display_aspect_ratio,
+                frame_rate=item.frame_rate,
+                field_order=item.field_order,
+                audio_channels=item.audio_channels,
+            )
+
+            update_title_status(
+                connection,
+                title_id=db_title["id"],
+                status=item.status,
+                notes=None,
+            )
+
             print(
                 f"Probe successful: "
                 f"{item.name}"
@@ -349,15 +396,17 @@ def run_probe_stage(
             item.status = "probe_failed"
             item.notes = str(error)
 
+            update_title_status(
+                connection,
+                title_id=db_title["id"],
+                status=item.status,
+                notes=item.notes,
+            )
+
             print(
                 f"Probe failed: "
                 f"{item.name}: {error}"
             )
-
-        save_manifest(
-            config.manifest_path,
-            items,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +418,7 @@ def run_encode_stage(
     backup: DVDBackup,
     items: list[ManifestItem],
     config: AppConfig,
+    connection,
 ) -> None:
     """
     Encode probed titles using the configured DVD encoding profile.
@@ -381,15 +431,32 @@ def run_encode_stage(
         probed -> encoded
     """
 
+    disc_id = get_or_create_disc(
+        connection,
+        name=backup.name,
+        backup_path=backup.path,
+    )
+
+    db_encode_titles = get_titles_by_status(
+        connection,
+        disc_id,
+        (
+            "probed",
+            "encode_failed",
+        ),
+    )
+
+    encode_source_titles = {
+        row["source_title"]
+        for row in db_encode_titles
+    }
+
     encode_items = [
         item
         for item in items
         if (
             item.disc == backup.name
-            and item.status in (
-                "probed",
-                "encode_failed",
-            )
+            and item.title in encode_source_titles
         )
     ]
 
@@ -401,6 +468,12 @@ def run_encode_stage(
         return
 
     for item in encode_items:
+        db_title = next(
+            row
+            for row in db_encode_titles
+            if row["source_title"] == item.title
+        )
+
         input_path = (
             config.staging_root
             / backup.name
@@ -460,10 +533,13 @@ def run_encode_stage(
                 f"{item.name}: {error}"
             )
 
-        save_manifest(
-            config.manifest_path,
-            items,
+        update_title_status(
+            connection,
+            title_id=db_title["id"],
+            status=item.status,
+            notes=item.notes or None,
         )
+
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +551,7 @@ def run_validation_stage(
     backup: DVDBackup,
     items: list[ManifestItem],
     config: AppConfig,
+    connection,
 ) -> None:
     """
     Validate encoded files against their extracted source.
@@ -486,16 +563,32 @@ def run_validation_stage(
     Successful transition:
         encoded -> validated
     """
+    disc_id = get_or_create_disc(
+        connection,
+        name=backup.name,
+        backup_path=backup.path,
+    )
+
+    db_validation_titles = get_titles_by_status(
+        connection,
+        disc_id,
+        (
+            "encoded",
+            "validation_failed",
+        ),
+    )
+
+    validation_source_titles = {
+        row["source_title"]
+        for row in db_validation_titles
+    }
 
     validation_items = [
         item
         for item in items
         if (
             item.disc == backup.name
-            and item.status in (
-                "encoded",
-                "validation_failed",
-            )
+            and item.title in validation_source_titles
         )
     ]
 
@@ -507,6 +600,12 @@ def run_validation_stage(
         return
 
     for item in validation_items:
+        db_title = next(
+            row
+            for row in db_validation_titles
+            if row["source_title"] == item.title
+        )
+
         source_path = (
             config.staging_root
             / backup.name
@@ -583,9 +682,11 @@ def run_validation_stage(
                 f"{item.name}: {error}"
             )
 
-        save_manifest(
-            config.manifest_path,
-            items,
+        update_title_status(
+            connection,
+            title_id=db_title["id"],
+            status=item.status,
+            notes=item.notes or None,
         )
 
 
@@ -636,18 +737,21 @@ def main() -> None:
             backup,
             items,
             config,
+            connection,
         )
 
         run_encode_stage(
             backup,
             items,
             config,
+            connection,
         )
 
         run_validation_stage(
             backup,
             items,
             config,
+            connection,
         )
 
     finally:

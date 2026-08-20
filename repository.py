@@ -23,7 +23,7 @@ Low-level connection handling belongs in database.py.
 
 import sqlite3
 from pathlib import Path
-
+from models import ManifestItem
 
 # ---------------------------------------------------------------------------
 # Releases
@@ -416,6 +416,158 @@ def upsert_title(
 
     return cursor.lastrowid
 
+def get_manifest_items_for_disc(
+    connection: sqlite3.Connection,
+    disc_id: int,
+) -> list[ManifestItem]:
+    """
+    Build pipeline working objects from SQLite state.
+
+    SQLite is authoritative for workflow state, technical metadata,
+    and media relationships. ManifestItem remains a temporary
+    in-memory transport object used by the existing processing stages.
+    """
+
+    rows = connection.execute(
+        """
+        SELECT
+            d.name AS disc,
+            t.source_title,
+            t.duration,
+            t.duration_seconds,
+            t.chapters,
+            t.size_bytes,
+            t.output_filename,
+            t.media_type,
+            t.approved,
+            t.status,
+            t.notes,
+            t.video_codec,
+            t.audio_codec,
+            t.width,
+            t.height,
+            t.display_aspect_ratio,
+            t.frame_rate,
+            t.field_order,
+            t.audio_channels,
+
+            m.name AS movie_name,
+            m.year AS movie_year,
+
+            s.name AS show_name,
+            s.year AS show_year,
+
+            e.season,
+            e.episode,
+            e.title AS episode_title
+
+        FROM titles t
+
+        JOIN discs d
+            ON t.disc_id = d.id
+
+        LEFT JOIN movies m
+            ON t.movie_id = m.id
+
+        LEFT JOIN episodes e
+            ON t.episode_id = e.id
+
+        LEFT JOIN shows s
+            ON e.show_id = s.id
+
+        WHERE t.disc_id = ?
+
+        ORDER BY t.source_title
+        """,
+        (disc_id,),
+    ).fetchall()
+
+    items = []
+
+    for row in rows:
+        media_type = row["media_type"] or ""
+
+        if media_type == "movie":
+            name = row["movie_name"] or ""
+            year = (
+                str(row["movie_year"])
+                if row["movie_year"] is not None
+                else ""
+            )
+            season = ""
+            episode = ""
+
+        elif media_type == "tv":
+            show_name = row["show_name"] or ""
+            episode_title = row["episode_title"] or ""
+
+            if show_name and episode_title:
+                name = (
+                    f"{show_name} - "
+                    f"{episode_title}"
+                )
+            else:
+                name = show_name or episode_title
+
+            year = (
+                str(row["show_year"])
+                if row["show_year"] is not None
+                else ""
+            )
+
+            season = (
+                str(row["season"])
+                if row["season"] is not None
+                else ""
+            )
+
+            episode = (
+                str(row["episode"])
+                if row["episode"] is not None
+                else ""
+            )
+
+        else:
+            name = ""
+            year = ""
+            season = ""
+            episode = ""
+
+        item = ManifestItem(
+            disc=row["disc"],
+            title=row["source_title"],
+            media_type=media_type,
+            name=name,
+            year=year,
+            season=season,
+            episode=episode,
+            duration=row["duration"] or "",
+            duration_seconds=row["duration_seconds"] or 0,
+            chapters=row["chapters"] or 0,
+            size_bytes=row["size_bytes"] or 0,
+            video_codec=row["video_codec"] or "",
+            audio_codec=row["audio_codec"] or "",
+            output_filename=row["output_filename"] or "",
+            status=row["status"] or "discovered",
+            ready=(
+                "yes"
+                if row["approved"]
+                else "no"
+            ),
+            notes=row["notes"] or "",
+            width=row["width"] or 0,
+            height=row["height"] or 0,
+            display_aspect_ratio=(
+                row["display_aspect_ratio"] or ""
+            ),
+            frame_rate=row["frame_rate"] or "",
+            field_order=row["field_order"] or "",
+            audio_channels=row["audio_channels"] or 0,
+        )
+
+        items.append(item)
+
+    return items
 
 def get_titles_for_disc(
     connection: sqlite3.Connection,
@@ -774,6 +926,7 @@ def sync_scanned_title(
         size_bytes=size_bytes,
         output_filename=output_filename,
     )
+
 def get_titles_ready_for_extraction(
     connection: sqlite3.Connection,
     disc_id: int,
