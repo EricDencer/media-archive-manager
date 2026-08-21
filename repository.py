@@ -494,20 +494,18 @@ def get_manifest_items_for_disc(
                 if row["movie_year"] is not None
                 else ""
             )
+
+            show_name = ""
             season = ""
             episode = ""
+            episode_title = ""
 
         elif media_type == "tv":
-            show_name = row["show_name"] or ""
-            episode_title = row["episode_title"] or ""
+            name = ""
 
-            if show_name and episode_title:
-                name = (
-                    f"{show_name} - "
-                    f"{episode_title}"
-                )
-            else:
-                name = show_name or episode_title
+            show_name = (
+                row["show_name"] or ""
+            )
 
             year = (
                 str(row["show_year"])
@@ -527,11 +525,17 @@ def get_manifest_items_for_disc(
                 else ""
             )
 
+            episode_title = (
+                row["episode_title"] or ""
+            )
+
         else:
             name = ""
             year = ""
+            show_name = ""
             season = ""
             episode = ""
+            episode_title = ""
 
         item = ManifestItem(
             disc=row["disc"],
@@ -539,8 +543,10 @@ def get_manifest_items_for_disc(
             media_type=media_type,
             name=name,
             year=year,
+            show_name=show_name,
             season=season,
             episode=episode,
+            episode_title=episode_title,
             duration=row["duration"] or "",
             duration_seconds=row["duration_seconds"] or 0,
             chapters=row["chapters"] or 0,
