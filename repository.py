@@ -963,3 +963,59 @@ def get_titles_ready_for_extraction(
         """,
         (disc_id,),
     ).fetchall()
+
+def sync_title_movie_identity(
+    connection: sqlite3.Connection,
+    title_id: int,
+    movie_id: int,
+) -> None:
+    """
+    Synchronize movie identity without changing workflow state.
+    """
+
+    connection.execute(
+        """
+        UPDATE titles
+        SET
+            media_type = 'movie',
+            movie_id = ?,
+            episode_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            movie_id,
+            title_id,
+        ),
+    )
+
+    connection.commit()
+
+
+def sync_title_episode_identity(
+    connection: sqlite3.Connection,
+    title_id: int,
+    episode_id: int,
+) -> None:
+    """
+    Synchronize television episode identity without changing
+    workflow state.
+    """
+
+    connection.execute(
+        """
+        UPDATE titles
+        SET
+            media_type = 'tv',
+            movie_id = NULL,
+            episode_id = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            episode_id,
+            title_id,
+        ),
+    )
+
+    connection.commit()
