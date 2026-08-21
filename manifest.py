@@ -136,12 +136,6 @@ def merge_title(
             item.duration_seconds = title.duration_seconds or 0
             item.chapters = title.chapters or 0
             item.size_bytes = title.size_bytes or 0
-            item.video_codec = title.video_codec or ""
-            item.audio_codec = (
-                title.audio_codecs[0]
-                if title.audio_codecs
-                else ""
-            )
             item.output_filename = title.output_filename or ""
 
             return item

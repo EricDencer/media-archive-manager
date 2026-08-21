@@ -30,10 +30,16 @@ class ManifestItem:
 
     # Human-owned metadata
     media_type: str = ""
+
+    # Movie metadata
     name: str = ""
     year: str = ""
+
+    # Television metadata
+    show_name: str = ""
     season: str = ""
     episode: str = ""
+    episode_title: str = ""
 
     # Machine-owned technical metadata
     duration: str = ""

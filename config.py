@@ -21,16 +21,13 @@ class AppConfig:
     encoded_root: Path
     plex_root: Path
     manifest_path: Path
+    database_path: Path
+    schema_path: Path
 
 
 def load_config() -> AppConfig:
     """
     Return the current local application configuration.
-
-    This function provides a single location for filesystem settings.
-    A future application version can replace this implementation with
-    environment variables or application configuration without
-    changing the ingestion stages.
     """
 
     archive_root = Path(
@@ -43,4 +40,6 @@ def load_config() -> AppConfig:
         encoded_root=archive_root / "encoded",
         plex_root=archive_root / "plex",
         manifest_path=Path("manifest.csv"),
+        database_path=archive_root / "media_archive.db",
+        schema_path=Path("schema.sql"),
     )
