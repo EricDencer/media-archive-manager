@@ -4,8 +4,7 @@ Media ingestion pipeline orchestrator.
 This module coordinates the end-to-end processing workflow for a
 selected archived DVD backup.
 
-Workflow:
-    inspect -> manifest merge -> extract -> probe -> encode -> validate
+inspect -> database sync -> YAML sync -> extract -> probe -> encode -> validate
 
 The individual processing operations are implemented in dedicated
 modules. This file is responsible only for determining which items
@@ -29,6 +28,7 @@ from models import DVDBackup, ManifestItem
 from probe import probe_media, summarize_media
 from scanner import find_dvd_backups
 from validator import validate_encoded_media
+from yaml_metadata import synchronize_yaml_metadata
 from database import (
     connect_database,
     initialize_database,
@@ -134,10 +134,21 @@ def inspect_backup(
             output_filename=title.output_filename or "",
         )
 
-        items = get_manifest_items_for_disc(
-            connection,
-            disc_id,
-        )
+    yaml_path = (
+        backup.path
+        / "ingest.yaml"
+    )
+
+    synchronize_yaml_metadata(
+        connection,
+        disc_id=disc_id,
+        yaml_path=yaml_path,
+    )
+
+    items = get_manifest_items_for_disc(
+        connection,
+        disc_id,
+    )
 
     print(
         f"Database synchronized with "
