@@ -1,0 +1,19 @@
+application:
+  environment: production
+
+paths:
+  archive_root: "/home/user/Media Archive"
+  staging_root: "/home/user/Media Archive/staging"
+  encoded_root: "/home/user/Media Archive/encoded"
+  database_path: "/home/user/Media Archive/media_archive.db"
+  schema_path: "schema.sql"
+
+capabilities:
+  acquisition:
+    enabled: false
+
+  publishing:
+    enabled: false
+
+  ai:
+    enabled: false

@@ -53,38 +53,65 @@ def select_backup(
     backup_name: str,
 ) -> DVDBackup:
     """
-    Locate a specific archived DVD backup.
-
-    Args:
-        config:
-            Application filesystem configuration.
-
-        backup_name:
-            Directory name of the DVD backup to process.
-
-    Returns:
-        The matching DVDBackup.
+    Locate a specific archived DVD backup across all configured
+    media locations.
 
     Raises:
         RuntimeError:
-            If the requested backup cannot be found.
+            If no matching backup is found or if multiple
+            matching backups make the name ambiguous.
     """
 
-    backups = find_dvd_backups(
-        config.archive_root
-    )
+    matches = []
 
-    try:
-        return next(
+    for location in config.media_locations:
+        if not location.enabled:
+            continue
+
+        if (
+            location.media_types
+            and "dvd" not in location.media_types
+        ):
+            continue
+
+        if not location.path.exists():
+            print(
+                f"Skipping unavailable media location: "
+                f"{location.name} "
+                f"({location.path})"
+            )
+            continue
+
+        backups = find_dvd_backups(
+            location.path
+        )
+
+        matches.extend(
             backup
             for backup in backups
             if backup.name == backup_name
         )
-    except StopIteration as error:
-        raise RuntimeError(
-            f"Backup not found: {backup_name}"
-        ) from error
 
+    if not matches:
+        raise RuntimeError(
+            f"Backup not found in configured "
+            f"media locations: {backup_name}"
+        )
+
+    if len(matches) > 1:
+        match_paths = "\n".join(
+            f"  - {backup.path}"
+            for backup in matches
+        )
+
+        raise RuntimeError(
+            f"Backup name is ambiguous: "
+            f"{backup_name}\n"
+            f"Matches:\n"
+            f"{match_paths}"
+        )
+
+    return matches[0]
 
 def inspect_backup(
     backup: DVDBackup,
@@ -93,13 +120,10 @@ def inspect_backup(
 ) -> list[ManifestItem]:
     """
     Inspect a DVD backup and synchronize its MakeMKV title data
-    with the current manifest.
+    with SQLite and per-disc YAML metadata.
 
     Returns:
-    Pipeline working objects built from the synchronized SQLite state.
-
-    Returns:
-        The updated collection of manifest items.
+        Pipeline working objects built from synchronized SQLite state.
     """
 
     print(f"Inspecting: {backup.name}")
@@ -154,7 +178,7 @@ def inspect_backup(
         f"Database synchronized with "
         f"{len(titles)} titles."
     )
-    
+
     return items
 
 
