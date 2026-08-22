@@ -18,6 +18,10 @@ import yaml
 
 DEFAULT_CONFIG_PATH = Path("config.yaml")
 
+SUPPORTED_MEDIA_TYPES = {
+    "dvd",
+    "bluray",
+}
 
 @dataclass(frozen=True)
 class MediaLocation:
@@ -151,6 +155,7 @@ def load_config(
         )
 
     media_locations = []
+    seen_location_names = set()
 
     for index, location in enumerate(
         media_locations_data
@@ -176,6 +181,19 @@ def load_config(
                 f"is required."
             )
 
+        normalized_name = str(name).strip()
+        name_key = normalized_name.casefold()
+
+        if name_key in seen_location_names:
+            raise ValueError(
+                f"Duplicate media location name: "
+                f"{normalized_name}"
+            )
+
+        seen_location_names.add(
+            name_key
+        )
+
         media_types = location.get(
             "media_types",
             [],
@@ -187,9 +205,27 @@ def load_config(
                 f"media_types must be a list."
             )
 
+        normalized_media_types = tuple(
+            str(media_type).lower().strip()
+            for media_type in media_types
+        )
+
+        unsupported_media_types = [
+            media_type
+            for media_type in normalized_media_types
+            if media_type not in SUPPORTED_MEDIA_TYPES
+        ]
+
+        if unsupported_media_types:
+            raise ValueError(
+                f"media_locations[{index}] "
+                f"contains unsupported media types: "
+                f"{', '.join(unsupported_media_types)}"
+            )
+
         media_locations.append(
             MediaLocation(
-                name=str(name),
+                name=normalized_name,
                 path=Path(path).expanduser(),
                 enabled=bool(
                     location.get(
@@ -197,13 +233,9 @@ def load_config(
                         True,
                     )
                 ),
-                media_types=tuple(
-                    str(media_type).lower()
-                    for media_type in media_types
-                ),
+                media_types=normalized_media_types,
             )
         )
-
 
     return AppConfig(
         environment=str(
