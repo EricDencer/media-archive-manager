@@ -45,6 +45,8 @@ class AppConfig:
     database_path: Path
     schema_path: Path
 
+    discovery_exclude_directories: tuple[str, ...]
+
     acquisition_enabled: bool
     publishing_enabled: bool
     ai_enabled: bool
@@ -156,6 +158,25 @@ def load_config(
 
     media_locations = []
     seen_location_names = set()
+
+    discovery = _require_mapping(
+        data,
+        "discovery",
+    )
+
+    exclude_directories = discovery.get(
+        "exclude_directories",
+        [],
+    )
+
+    if not isinstance(
+        exclude_directories,
+        list,
+    ):
+        raise ValueError(
+            "discovery.exclude_directories "
+            "must be a list."
+        )
 
     for index, location in enumerate(
         media_locations_data
@@ -276,6 +297,10 @@ def load_config(
                 "paths",
             )
         ).expanduser(),
+        discovery_exclude_directories=tuple(
+            str(directory)
+            for directory in exclude_directories
+        ),
         acquisition_enabled=bool(
             acquisition.get(
                 "enabled",

@@ -29,6 +29,7 @@ from probe import probe_media, summarize_media
 from scanner import find_dvd_backups
 from validator import validate_encoded_media
 from yaml_metadata import synchronize_yaml_metadata
+from yaml_stub import write_ingest_stub
 from database import (
     connect_database,
     initialize_database,
@@ -41,6 +42,10 @@ from repository import (
     sync_scanned_title,
     update_title_probe_metadata,
     update_title_status,
+)
+from scanner import (
+    find_configured_dvd_backups,
+    find_dvd_backups,
 )
 
 # ---------------------------------------------------------------------------
@@ -181,6 +186,155 @@ def inspect_backup(
 
     return items
 
+def report_discovered_backups(
+    config: AppConfig,
+) -> None:
+    """Report archived DVD backups and YAML status."""
+
+    backups = sorted(
+        find_configured_dvd_backups(
+            config
+        ),
+        key=lambda backup: (
+            backup.name.casefold(),
+            str(backup.path),
+        ),
+    )
+
+    with_yaml = 0
+    needs_yaml = 0
+
+    for backup in backups:
+        yaml_path = (
+            backup.path
+            / "ingest.yaml"
+        )
+
+        if yaml_path.exists():
+            status = "metadata present"
+            with_yaml += 1
+        else:
+            status = "needs metadata"
+            needs_yaml += 1
+
+        print(
+            f"{backup.name}: "
+            f"{status} "
+            f"[{backup.path}]"
+        )
+
+    print()
+    print(
+        f"DVD backups discovered: {len(backups)}"
+    )
+    print(
+        f"Metadata present:       {with_yaml}"
+    )
+    print(
+        f"Needs metadata:         {needs_yaml}"
+    )
+
+def generate_missing_yaml_stubs(
+    config: AppConfig,
+) -> None:
+    """
+    Inspect discovered DVD backups and generate ingest.yaml
+    stubs where metadata files do not already exist.
+
+    Failure processing one backup does not stop the batch.
+    """
+
+    backups = sorted(
+        find_configured_dvd_backups(
+            config
+        ),
+        key=lambda backup: (
+            backup.name.casefold(),
+            str(backup.path),
+        ),
+    )
+
+    existing_yaml = 0
+    created_yaml = 0
+    inspection_failures = 0
+
+    for backup in backups:
+        yaml_path = (
+            backup.path
+            / "ingest.yaml"
+        )
+
+        if yaml_path.exists():
+            existing_yaml += 1
+
+            print(
+                f"{backup.name}: "
+                f"metadata already exists "
+                f"[{backup.path}]"
+            )
+
+            continue
+
+        print(
+            f"{backup.name}: "
+            f"inspecting "
+            f"[{backup.path}]"
+        )
+
+        try:
+            result = inspect_dvd(
+                backup
+            )
+
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"MakeMKV inspection failed: "
+                    f"{result.stderr}"
+                )
+
+            titles = parse_robot_titles(
+                result.stdout
+                + result.stderr
+            )
+
+            if not titles:
+                raise RuntimeError(
+                    "No source titles discovered."
+                )
+
+            created_path = write_ingest_stub(
+                backup,
+                titles,
+            )
+
+            created_yaml += 1
+
+            print(
+                f"  Created: "
+                f"{created_path} "
+                f"({len(titles)} titles)"
+            )
+
+        except Exception as error:
+            inspection_failures += 1
+
+            print(
+                f"  FAILED: {error}"
+            )
+
+    print()
+    print(
+        f"Backups discovered:    {len(backups)}"
+    )
+    print(
+        f"Existing YAML:         {existing_yaml}"
+    )
+    print(
+        f"YAML stubs created:    {created_yaml}"
+    )
+    print(
+        f"Inspection failures:   {inspection_failures}"
+    )
 
 # ---------------------------------------------------------------------------
 # Extraction stage
@@ -739,6 +893,14 @@ def main() -> None:
     """
 
     config = load_config()
+
+    config = load_config()
+
+    generate_missing_yaml_stubs(
+        config
+    )
+
+    return
 
     initialize_database(
         config.database_path,
