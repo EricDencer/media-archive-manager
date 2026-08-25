@@ -1,6 +1,14 @@
 application:
   environment: production
 
+media_locations:
+  - name: primary-archive
+    enabled: true
+    path: "/home/user/Media Archive"
+    media_types:
+      - dvd
+      - bluray
+
 paths:
   archive_root: "/home/user/Media Archive"
   staging_root: "/home/user/Media Archive/staging"
@@ -10,9 +18,14 @@ paths:
 
 capabilities:
   acquisition:
-    enabled: false
+  enabled: false
 
-  publishing:
+  optical_devices:
+    - name: primary-drive
+      enabled: true
+      device: "/dev/sr0"
+
+publishing:
     enabled: false
 
   ai:

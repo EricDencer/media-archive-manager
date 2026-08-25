@@ -33,12 +33,21 @@ class MediaLocation:
     media_types: tuple[str, ...] = ()
 
 @dataclass(frozen=True)
+class OpticalDevice:
+    """Configured optical media device."""
+
+    name: str
+    device: Path
+    enabled: bool = True
+
+@dataclass(frozen=True)
 class AppConfig:
     """Validated runtime configuration."""
 
     environment: str
 
     media_locations: tuple[MediaLocation, ...]
+    optical_devices: tuple[OpticalDevice, ...]
 
     staging_root: Path
     encoded_root: Path
@@ -132,6 +141,78 @@ def load_config(
         capabilities,
         "acquisition",
     )
+
+    optical_devices_data = acquisition.get(
+        "optical_devices",
+        [],
+    )
+
+    if not isinstance(
+        optical_devices_data,
+        list,
+    ):
+        raise ValueError(
+            "capabilities.acquisition.optical_devices "
+            "must be a list."
+        )
+
+    optical_devices = []
+    seen_device_names = set()
+
+    for index, device in enumerate(
+        optical_devices_data
+    ):
+        if not isinstance(device, dict):
+            raise ValueError(
+                f"capabilities.acquisition."
+                f"optical_devices[{index}] "
+                f"must be a mapping."
+            )
+
+        name = device.get("name")
+        device_path = device.get("device")
+
+        if not name:
+            raise ValueError(
+                f"capabilities.acquisition."
+                f"optical_devices[{index}].name "
+                f"is required."
+            )
+
+        if not device_path:
+            raise ValueError(
+                f"capabilities.acquisition."
+                f"optical_devices[{index}].device "
+                f"is required."
+            )
+
+        normalized_name = str(name).strip()
+        name_key = normalized_name.casefold()
+
+        if name_key in seen_device_names:
+            raise ValueError(
+                f"Duplicate optical device name: "
+                f"{normalized_name}"
+            )
+
+        seen_device_names.add(
+            name_key
+        )
+
+        optical_devices.append(
+            OpticalDevice(
+                name=normalized_name,
+                device=Path(
+                    device_path
+                ),
+                enabled=bool(
+                    device.get(
+                        "enabled",
+                        True,
+                    )
+                ),
+            )
+        )
 
     publishing = _require_mapping(
         capabilities,
@@ -268,6 +349,9 @@ def load_config(
         ),
         media_locations=tuple(
             media_locations
+        ),
+        optical_devices=tuple(
+            optical_devices
         ),
         staging_root=Path(
             _require_value(
